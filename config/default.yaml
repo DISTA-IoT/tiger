@@ -431,11 +431,11 @@ rewards:
 # this value times the per-episode decay multiplier -- 1.0 unless
 # intrusion_detection.price_decay is enabled. Currently a flat 100 for everyone.
 prices:
-    echo: 10
+    echo: 1
     hakai: 10
     mirai: 150
     hajime: 10
-    doorlock: 10
+    doorlock: 1
     gafgyt: 10
     muhstik: 10
     h_scan: 10
