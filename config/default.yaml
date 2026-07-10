@@ -316,6 +316,12 @@ intrusion_detection:
   per_beta: 0.4
   use_soft_update: true # Use soft update for the target model
   tau: 0.005 # tau for soft update
+  # --- Value-learning (DM) divergence guardrails (ValueLearningAgent: DQN/DDQN/Dueling*). ---
+  # These arrest the deadly-triad Q runaway visible in the diagnostics/q_abs_max,
+  # target_q_abs_max and td_error_abs_max series (bootstrapped Q ramping to ~1e10,
+  # orders of magnitude above the legitimate |Q| ceiling of ~r_max/(1-gamma)).
+  dm_grad_clip_max_norm: 10.0 # L2-norm clip on the DM value net's gradients each optimizer step (the analogue of the IM's intrusion_detection.grad_clip_max_norm, which the DM previously lacked). <= 0 disables.
+  dm_q_abs_clamp: 1.0e6 # hard symmetric clamp [-C, C] on the bootstrap target (rewards + gamma^n * next_q) before the Huber regression. Set generously (>> any legitimate |Q|, << the observed 1e10 divergence) so it never touches healthy learning and only caps a runaway. <= 0 disables.
   #
   # for the DAI Agent:
   #
