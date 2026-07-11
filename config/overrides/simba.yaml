@@ -1,0 +1,26 @@
+# Run the controller with the SIMBA brain (Simple Intelligence Module for
+# Basic Ablations) instead of the full TIGER stack: one plain DQN decision
+# module + a prototypical inference module, traffic-only (flowstats +
+# packets). See smartville-controller/simba/README.md.
+#
+# Select with:  override: simba
+
+node_features: false
+health_monitoring: false
+
+wandb:
+  wb_tracking: true
+  wb_project_name: 'SIMBA'
+  wb_run_name: 'simba_drl'
+
+intrusion_detection:
+  brain: simba   # 'tiger' (default) | 'simba'
+
+# Optional SimbaConfig overrides (any field of simba/config.py); the whole
+# block is forwarded verbatim to SimbaBrain.from_tiger_config.
+simba:
+  ablation: drl          # drl | no_epistemic | greedy_cti
+  gamma: 0.998
+  unknown_accept_discount: 0.25
+  # hard_g2s: [mirai, hajime, gafgyt]   # CTI-sale blocklist (oracle-buyer with greedy_cti)
+  # im_snapshot_path: /pox/pox/smartController/simba_models/im_pretrained.pt
