@@ -1,17 +1,106 @@
+# TIGER, configured for SIMBA parity.
+#
+# SIMBA (smartville-controller/simba/) is the simplified re-implementation of
+# this brain that produced the good offline results on the pre-recorded real
+# traces (see simba/REAL_DATA_CALIBRATION.md). This override makes the full
+# TIGER stack run with SIMBA's calibrated hyperparameters and decision-module
+# recipe, so the live GNS3 experiment reproduces the offline-validated regime
+# as closely as the TIGER architecture allows. Every value below is annotated
+# with the SimbaConfig field it mirrors (smartville-controller/simba/config.py).
+#
+# Known, deliberate residual differences from SIMBA (documented, not bugs):
+#   * neural_modules.hidden_size stays 200 (SIMBA: 64) -- the shipped pretrained
+#     IM checkpoints are h200, and cold-starting the IM online is exactly the
+#     instability SIMBA's calibration warns about; the drift problem hidden_size
+#     interacted with is instead addressed by im_learning_rate 1e-4.
+#   * unknown-traffic clustering stays on the (G1-supervised) kernel-regression
+#     head rather than SIMBA's standardised-input-space single-linkage; both are
+#     G1-calibrated, but the substrate differs.
+#   * the DM's exteroceptive state is the hidden-space centroid ('prototype'
+#     mode) rather than SIMBA's stationary input-space centroid; the low
+#     im_learning_rate is what keeps it near-stationary.
+
 host_ip: 192.168.183.146
 disable_proxy: true
+# SIMBA is traffic-only by design (flowstats + raw packet bytes): no node
+# telemetry stream in the IM.
 node_features: false
 health_monitoring: false
 
+# SIMBA's anomaly-detection rule as a TIGER model variant: a sample is unknown
+# iff its distance to the nearest known-class prototype exceeds a threshold tau
+# calibrated (by the G1-supervised AD/BCE loss) to separate Knowns from the G1
+# pseudo zero-days -- mirrors SimbaInference.calibrate()/infer(). Pair with
+# ad_threshold: 0.5 below (p > 0.5 <=> dist > tau).
+inference_model_variant: simba_ad
+
 wandb:
   wb_tracking: true
-  wb_run_name: 'DDQN'
-  wb_project_name:  'TIGER3.0'
-  
+  wb_run_name: 'DQN_simba_parity'
+  wb_project_name: 'TIGER3.0'
+
 intrusion_detection:
-  boltzmann_sampling: false
-  agent: DDQN
-  
+  # ------------------------------------------------------ decision module
+  agent: DQN                # simba: dm_agent 'dqn' (the shipped/calibrated learner)
+  boltzmann_sampling: false # simba explores epsilon-greedy, never Boltzmann
+  agent_discount_rate: 0.998   # simba: gamma
+  dm_learning_rate: 5.0e-4     # simba: dm_learning_rate
+  dm_hidden: 128               # simba: dm_hidden (DM trunk width, decoupled from IM hidden_size)
+  agent_memory_size: 100000    # simba: replay_capacity
+  replay_batch_size: 64        # simba: replay_batch_size
+  use_per: false               # simba: uniform ring replay, no PER
+  n_step_rewards: 1            # simba: 1-step TD target
+  use_soft_update: false       # simba: hard target update...
+  update_target_freq: 500      # ...every 500 steps (target_update_freq)
+  dm_grad_clip_max_norm: 10.0  # simba: grad_clip
+  init_epsilon_egreedy: 1.0    # simba: eps_start
+  greedy_min: 0.05             # simba: eps_end
+  eps_linear_decay_steps: 30000 # simba: eps_decay_steps (linear, per decision)
+  explore_buy_weight: 0.1      # simba: explore_buy_weight (buy-averse exploration)
+  dm_reward_scale: 0.02        # simba: reward_scale (TD sees scaled rewards)
+  dm_learn_start: 1000         # simba: learn_start
+  dm_replay_per_decision: true # simba replays the DM after every decision
+  # simba's DM-state confidence channel (dist_ratio / mean anomaly prob) is a
+  # bounded score; 'baseline' (mean probability / logit log-ratio) is the
+  # bounded strategy, unlike the unbounded 'energy' default.
+  confidence_strategy: baseline
+  # Learned drl policy: all scripted CTI ablations off (simba ablation: 'drl').
+  greedy_cti: False
+  fixed_threshold_cti: False
+  cti_period: -1
+  no_epistemic_actions: false
+  hard_g2s: []
+
+  # ----------------------------------------------------- inference module
+  im_learning_rate: 1.0e-4  # simba: im_learning_rate -- THE stability fix from the real-trace calibration: keeps the online IM near its pretrained snapshot so the DM's state distribution doesn't drift under it (eval-return std went 711 -> 80 in SIMBA when lowered from 1e-3)
+  k_shot: 8                 # simba: im_support_size (support samples per class)
+  batch_size: 16            # 8 support + 8 query per class = simba's im_support_size + im_query_size
+  packets_per_sample: 1     # simba: packets_per_sample (one packet row per sample, mean-pooled)
+  replay_buffer_max_capacity: 512 # simba: buffer_capacity (per-class shadow buffer)
+  train_steps_per_tick: 1   # simba: im_train_steps_per_tick
+  train_every_n_ticks: 1
+  buy_train_burst: 10       # simba: buy_train_burst (assimilate a bought label immediately)
+  use_huber_cs: false       # simba trains the prototypical classifier with cross-entropy
+  ad_threshold: 0.5         # with simba_ad, p > 0.5 <=> nearest-prototype dist > tau: exactly simba's rule
+  # simba's prototypes come from TRAINABLE classes only (Knowns + bought CTIs);
+  # G1s supervise novelty but are never part of the inference known-set.
+  exclude_g1_from_ad_known_set: true
+
+  # ------------------------------------------------ environment / economics
+  tiger_init_budget: 2500   # simba: init_budget (headroom so a greedy buyer could afford all 7 CTIs)
+  min_budget: 0             # simba: min_budget (bankruptcy line, metric-only below)
+  max_budget: 2500
+  disable_budget_bankrupt_termination: true # simba: bankrupt_terminates false -- termination poisons learning: random exploratory buys bankrupt every episode before a good buy's payoff is ever observed
+  disable_budget_win_termination: true
+  max_episode_steps: 1000   # ~= simba's 51-tick real-trace episode at ~20 decisions/tick
+  unknown_accept_reward_scale: 0.25 # simba: unknown_accept_discount (alpha) -- the crux: unlabeled benign traffic only realises a quarter of its service value, so buying a benign zero-day's label is worth paying for
+  block_benign_penalty_scale: 1.0   # simba: block_benign_scale (beta) -- blocking benign traffic costs the service it would have earned (legacy TIGER scored blocks as 0)
+  useless_epistemic_penalty: 25     # simba: waste_buy_penalty (a buy targeting a non-purchasable cluster majority)
+  cluster_impurity_penalty_weight: 0.0 # simba has no impurity shaping term
+  epistemic_is_blocking: false      # simba: a CTI buy also lets the cluster's flows through
+  hard_epistemic_action: false      # simba grants no AD oracle with a label buy
+  price_decay: false                # simba: prices are flat/static
+
 topology_creator:
   # contr_start: sh # COMMENT THIS IF YOU WANT THE TIGER SERVER TO START AUTOMATICALLY
   use_gns3_config_file: false
@@ -21,5 +110,3 @@ topology_creator:
     HTTP_PROXY=http://proxy.uninsubria.it:3128
     http_proxy=http://proxy.uninsubria.it:3128
     no_proxy=localhost,127.0.0.1,${topology_creator.controller_ip}
-    
-
