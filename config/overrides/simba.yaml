@@ -16,25 +16,4 @@ wandb:
 
 intrusion_detection:
   brain: simba   # 'tiger' (default) | 'simba'
-
-# Optional SimbaConfig overrides (any field of simba/config.py); the whole
-# block is forwarded verbatim to SimbaBrain.from_tiger_config.
-simba:
-  ablation: drl          # drl | no_epistemic | greedy_cti | fixed_threshold_cti
-  # DM value-learner, orthogonal to `ablation` (which only gates the epistemic
-  # action). All three share every hyperparameter and differ only in the TD
-  # target / Q-head -- see simba/agent.py and simba/README.md ("Agents"):
-  #   dqn          -- vanilla DQN (default; the calibrated/shipped agent)
-  #   ddqn         -- Double DQN (online net selects a', target net scores it)
-  #   dueling_ddqn -- Double DQN on a dueling V(s)+A(s,a) head
-  dm_agent: dqn          # dqn | ddqn | dueling_ddqn
-  gamma: 0.998
-  unknown_accept_discount: 0.25
-  # fixed_threshold_cti ablation -- the "buy CTI whenever uncertain" threshold
-  # policy (SIMBA's port of intrusion_detection.fixed_threshold_cti above): forces
-  # a CTI buy on an unknown cluster whenever its IM anomaly score mean(dist)/tau
-  # exceeds cti_confidence_threshold (and the label is on sale + affordable), else
-  # defers accept/block to the learned DQN. Set the mode above to enable it:
-  # cti_confidence_threshold: 1.5   # >1 (each unknown cluster is already beyond tau)
-  # hard_g2s: [mirai, hajime, gafgyt]   # CTI-sale blocklist (oracle-buyer with greedy_cti)
-  # im_snapshot_path: /pox/pox/smartController/simba_models/im_pretrained.pt
+  flowstats_freq_secs:  2
