@@ -7,7 +7,7 @@ disable_proxy: false  # Whether to disable the proxy for the nodes of the topolo
 dashboard_port: 7777 # Port of the Flask dashboard in the host machine
 pending_packet_feats_poll_secs: 2 # How often (seconds) the dashboard's PACKET QUEUES tab polls the controller for pending_packet_feats queue utilisation
 browser_path: firefox
-inference_model_variant: mahalanobis # Picks im_models/<name>.py inside smartville-controller (default, mahalanobis, optim, dotprod_kr, dotprod_kr_simple_krloss, simple_krloss)
+inference_model_variant: mahalanobis # Picks im_models/<name>.py inside smartville-controller (default, mahalanobis, mahalacluster, optim, dotprod_kr, dotprod_kr_simple_krloss, simple_krloss, simba_ad). simba_ad ports SIMBA's anomaly-detection rule: unknown iff nearest-prototype distance > tau, tau calibrated Known-vs-G1 by the AD/BCE loss (pair it with ad_threshold: 0.5).
 
 smart_controller_log_level: info
 smart_switch_log_level: info
@@ -207,8 +207,21 @@ switching_args:
 
 intrusion_detection:
   brain: tiger  # 'tiger' (default) | 'simba' Notice that, if you use the simba brain, MANY of this whole block of configs is NOT used, only the simba block counts.
-  eval: false  # Whether to use neural modules in evaluation mode (no training)  
+  eval: false  # Whether to use neural modules in evaluation mode (no training)
   learning_rate: 1e-3
+  # --- SIMBA-parity knobs (see smartville-controller/simba/config.py for the calibrated
+  # values; overrides/dista_tiger.yaml sets them). All defaults below are exact legacy
+  # no-ops, so an unconfigured run reproduces existing behaviour byte-for-byte. ---
+  im_learning_rate: ${intrusion_detection.learning_rate} # Inference-module (encoder/classifier/confidence-decoder) Adam step size, decoupled from the DM's. SIMBA's real-trace calibration: 1e-4 (an order of magnitude below the DM) keeps the online IM near its pretrained snapshot; larger values drift the encoder and destabilise the DM.
+  dm_learning_rate: ${intrusion_detection.learning_rate} # Decision-module (value/policy nets) Adam step size. SIMBA: 5e-4.
+  eps_linear_decay_steps: 0 # >0 switches epsilon-greedy to SIMBA's LINEAR decay per DECISION: epsilon runs from init_epsilon_egreedy to greedy_min over this many decisions (SIMBA: 30000 ~= 30 episodes on the real trace). 0 keeps the legacy per-replay multiplicative greedy_decay.
+  explore_buy_weight: -1 # Probability mass a RANDOM (exploratory) draw puts on the CTI-buy action (2); the rest splits evenly over accept/block. SIMBA: 0.1 (a uniform 1/3 makes exploration ruinously expensive -- every third random decision pays a CTI price). Negative keeps the legacy uniform draw.
+  dm_reward_scale: 1.0 # Rewards are multiplied by this before entering the DM replay memory (TD learning only sees the scaled value; the budget stays raw). SIMBA: 0.02.
+  dm_learn_start: 0 # Stored transitions required before DM gradient updates begin. SIMBA: 1000.
+  dm_hidden: 0 # DM value-net trunk width, decoupled from neural_modules.hidden_size (which also sizes the IM). SIMBA: 128. 0 falls back to hidden_size (legacy coupled width).
+  buy_train_burst: 0 # Extra IM gradient steps fired right after a purchased CTI label is delivered, so the fresh class doesn't sit untrained until the per-tick cadence catches up. SIMBA: 10.
+  dm_replay_per_decision: false # If true, the DM replays once per DECISION taken in the tick (SIMBA's cadence) instead of once per tick.
+  block_benign_penalty_scale: 0.0 # Lost-service penalty for blocking: a blocked group loses scale * (the positive per-flow reward it would have earned). SIMBA's beta = 1.0; the legacy TIGER rule (0.0) scores every block as 0, making over-blocking free.
   use_huber_cs: true # Use Huber loss for the classification loss.
   pretrained_models_dir: '/pox/pox/smartController/tiger_models/'  # This path refers to a path inside the controller docker container
   save_models: false # overwritte models on disk.
@@ -463,7 +476,12 @@ rewards:
 # knowledge.Knowns + G1s + G2s (a wasted buy, or a dynamic_knowledge reshuffle,
 # can make the epistemic action target any class). The price actually charged is
 # this value times the per-episode decay multiplier -- 1.0 unless
-# intrusion_detection.price_decay is enabled. Currently a flat 100 for everyone.
+# intrusion_detection.price_decay is enabled. Current values are SIMBA's
+# real-trace calibration (simba/config.py DEFAULT_PRICES + REAL_DATA_CALIBRATION.md):
+# benign zero-days (doorlock 40, echo 80) are priced well below their (1-alpha)
+# recoverable service gap so a value-learning DM buys both; malicious zero-days
+# (550) sit above their ~150-400 classifier "de-noising" value so buying them is
+# a net loss, punishing a greedy buyer.
 prices:
     echo: 80
     hakai: 0
