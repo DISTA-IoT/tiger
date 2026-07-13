@@ -1,22 +1,74 @@
+# Pretrain a NEW inference module with SIMBA's geometry and training recipe,
+# so the checkpoint the SIMBA-parity agency runs load (overrides/dista_tiger.yaml)
+# is itself as close to SIMBA's pretrained IM as the TIGER architecture allows.
+#
+# What "resembling SIMBA" means here (simba/inference.py + simba/config.py):
+#   * hidden_size 64 (SIMBA's embedding width; the legacy checkpoints are h200)
+#   * a single GRU layer, no dropout, GRU fed the raw (BatchNorm'd) features
+#     directly (use_encoder: false) -- SIMBA runs its GRU straight on the
+#     flowstats window; with packets_per_sample: 1 the packet stream's 1-step
+#     GRU degenerates to a gated projection of the packet bytes, close to
+#     SIMBA's mean-bytes MLP
+#   * prototypical episodes with 8 support + 8 query per class
+#     (k_shot 8, batch_size 16) and cross-entropy (use_huber_cs: false)
+#   * the simba_ad anomaly head: unknown iff nearest-prototype distance > tau,
+#     tau calibrated Known-vs-G1 by the AD/BCE loss (ad_threshold 0.5), with
+#     G1 kept out of the inference known-set
+#   * pretraining step size 1e-3 = SIMBA's pretrain_learning_rate (the online
+#     agency runs then drop the IM to 1e-4 via dista_tiger's im_learning_rate)
+#
+# AFTER PRETRAINING -- two manual steps before agency runs can use the model:
+#   1. check_progress_and_save writes best checkpoints as
+#        multiclass_flow_packet_classifier_pretrained_h64single_<wb_run_name>.pt
+#        flow_packet_confidence_decoder_pretrained_h64single_<wb_run_name>.pt
+#      (+ 'coupled_<wb_run_name>' variants saved on KR-precision improvements)
+#      inside the controller container's tiger_models/ dir, but check_pretrained
+#      LOADS the plain names -- copy/rename your chosen pair to:
+#        multiclass_flow_packet_classifier_pretrained_h64.pt
+#        flow_packet_confidence_decoder_pretrained_h64.pt
+#      (and commit them to smartville-controller/tiger_models/ so the docker
+#      image ships them).
+#   2. In overrides/dista_tiger.yaml, uncomment the "SIMBA-geometry IM" block
+#      (neural_modules hidden_size/recurrent_layers/dropout/use_encoder) -- the
+#      checkpoint filename only encodes h64, so the architecture knobs MUST
+#      match this file exactly or load_state_dict fails.
+
 host_ip: 192.168.183.146
 disable_proxy: true
-node_features: false  
+node_features: false
 health_monitoring: false
 
+# SIMBA's anomaly rule as the pretrained confidence decoder: its tau/scale are
+# learned during this pretraining and saved with the checkpoint.
+inference_model_variant: simba_ad
 
 wandb:
  wb_tracking: true
- wb_run_name: 'PT'
- wb_project_name:  'TIGER3.0'
+ wb_run_name: 'PT_simba64'
+ wb_project_name: 'TIGER3.0'
  plots: true
 
+neural_modules:
+  hidden_size: 64      # simba: hidden_size (legacy TIGER checkpoints are h200)
+  recurrent_layers: 1  # simba: single-layer GRU
+  dropout: 0.0         # simba has no dropout
+  use_encoder: false   # simba's GRU ingests the raw flowstats window directly (no pre-GRU MLP)
 
 intrusion_detection:
   pretrained_inference: false
   agency: false
   online_evaluation: true
   save_models: true
-  
+  # SIMBA pretraining recipe:
+  im_learning_rate: 1.0e-3        # simba: pretrain_learning_rate (agency runs later use 1e-4)
+  k_shot: 8                       # simba: im_support_size
+  batch_size: 16                  # 8 support + 8 query = simba's im_support_size + im_query_size
+  packets_per_sample: 1           # simba: packets_per_sample
+  replay_buffer_max_capacity: 512 # simba: buffer_capacity
+  use_huber_cs: false             # simba: cross-entropy prototypical loss
+  ad_threshold: 0.5               # simba_ad: p > 0.5 <=> dist > tau
+  exclude_g1_from_ad_known_set: true # simba: G1s never in the inference known-set
+
 topology_creator:
   use_gns3_config_file: false
   ADDITIONAL_ENV_VARS: |
@@ -25,4 +77,3 @@ topology_creator:
     HTTP_PROXY=http://proxy.uninsubria.it:3128
     http_proxy=http://proxy.uninsubria.it:3128
     no_proxy=localhost,127.0.0.1,${topology_creator.controller_ip}
-    
