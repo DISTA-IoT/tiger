@@ -20,6 +20,13 @@ intrusion_detection:
 # block is forwarded verbatim to SimbaBrain.from_tiger_config.
 simba:
   ablation: drl          # drl | no_epistemic | greedy_cti | fixed_threshold_cti
+  # DM value-learner, orthogonal to `ablation` (which only gates the epistemic
+  # action). All three share every hyperparameter and differ only in the TD
+  # target / Q-head -- see simba/agent.py and simba/README.md ("Agents"):
+  #   dqn          -- vanilla DQN (default; the calibrated/shipped agent)
+  #   ddqn         -- Double DQN (online net selects a', target net scores it)
+  #   dueling_ddqn -- Double DQN on a dueling V(s)+A(s,a) head
+  dm_agent: dqn          # dqn | ddqn | dueling_ddqn
   gamma: 0.998
   unknown_accept_discount: 0.25
   # fixed_threshold_cti ablation -- the "buy CTI whenever uncertain" threshold
