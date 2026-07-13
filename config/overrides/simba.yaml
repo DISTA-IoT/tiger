@@ -16,4 +16,3 @@ wandb:
 
 intrusion_detection:
   brain: simba   # 'tiger' (default) | 'simba'
-  flowstats_freq_secs:  2
