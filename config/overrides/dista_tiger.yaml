@@ -9,10 +9,14 @@
 # with the SimbaConfig field it mirrors (smartville-controller/simba/config.py).
 #
 # Known, deliberate residual differences from SIMBA (documented, not bugs):
-#   * neural_modules.hidden_size stays 200 (SIMBA: 64) -- the shipped pretrained
-#     IM checkpoints are h200, and cold-starting the IM online is exactly the
-#     instability SIMBA's calibration warns about; the drift problem hidden_size
-#     interacted with is instead addressed by im_learning_rate 1e-4.
+#   * neural_modules.hidden_size stays 200 (SIMBA: 64) UNTIL a SIMBA-geometry
+#     IM has been pretrained -- the shipped pretrained IM checkpoints are h200,
+#     and cold-starting the IM online is exactly the instability SIMBA's
+#     calibration warns about; the drift problem hidden_size interacted with is
+#     instead addressed by im_learning_rate 1e-4. To close this gap, pretrain
+#     with overrides/tiger_pretraining.yaml (now the SIMBA-geometry recipe),
+#     rename the saved checkpoints as its header describes, then uncomment the
+#     "SIMBA-geometry IM" block below.
 #   * unknown-traffic clustering stays on the (G1-supervised) kernel-regression
 #     head rather than SIMBA's standardised-input-space single-linkage; both are
 #     G1-calibrated, but the substrate differs.
@@ -38,6 +42,19 @@ wandb:
   wb_tracking: true
   wb_run_name: 'DQN_simba_parity'
   wb_project_name: 'TIGER3.0'
+
+# --- SIMBA-geometry IM (uncomment ONLY once the h64 checkpoints exist) ---
+# Pretrain with `override: tiger_pretraining` (see that file's header), rename
+# the saved best checkpoints to multiclass_flow_packet_classifier_pretrained_h64.pt
+# and flow_packet_confidence_decoder_pretrained_h64.pt in tiger_models/, then
+# enable this block. Every knob here MUST match tiger_pretraining.yaml exactly:
+# the checkpoint filename only encodes the hidden size, so a mismatch in
+# recurrent_layers/dropout/use_encoder fails at load_state_dict.
+# neural_modules:
+#   hidden_size: 64      # simba: hidden_size
+#   recurrent_layers: 1  # simba: single-layer GRU
+#   dropout: 0.0         # simba: no dropout
+#   use_encoder: false   # simba: GRU on the raw flowstats window
 
 intrusion_detection:
   # ------------------------------------------------------ decision module
