@@ -361,8 +361,8 @@ def main() -> int:
     parser.add_argument(
         "--run-duration-seconds",
         type=int,
-        default=60 * 60,
-        help="Duration of each individual run (default: 60 minutes).",
+        default=120 * 60,
+        help="Duration of each individual run (default: 120 minutes).",
     )
     parser.add_argument(
         "--health-poll-interval-seconds",
