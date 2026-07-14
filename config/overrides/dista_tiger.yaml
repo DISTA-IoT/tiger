@@ -20,9 +20,9 @@
 #   * unknown-traffic clustering stays on the (G1-supervised) kernel-regression
 #     head rather than SIMBA's standardised-input-space single-linkage; both are
 #     G1-calibrated, but the substrate differs.
-#   * the DM's exteroceptive state is the hidden-space centroid ('prototype'
-#     mode) rather than SIMBA's stationary input-space centroid; the low
-#     im_learning_rate is what keeps it near-stationary.
+#   * (closed) the DM's exteroceptive state now IS SIMBA's stationary
+#     input-space centroid: `state: input` below. The full remaining-difference
+#     audit lives in smartville-controller/tiger_vs_simba.md.
 
 host_ip: 192.168.183.146
 disable_proxy: true
@@ -77,6 +77,11 @@ intrusion_detection:
   dm_reward_scale: 0.02        # simba: reward_scale (TD sees scaled rewards)
   dm_learn_start: 1000         # simba: learn_start
   dm_replay_per_decision: true # simba replays the DM after every decision
+  # simba feeds the DM the group's/cluster's centroid in the STANDARDISED
+  # RAW-INPUT space (input_rep), not the drifting hidden embedding -- the
+  # stationary representation that keeps cluster identities legible to the
+  # DQN across IM training. 'input' is TIGER's port of exactly that.
+  state: input
   # simba's DM-state confidence channel (dist_ratio / mean anomaly prob) is a
   # bounded score; 'baseline' (mean probability / logit log-ratio) is the
   # bounded strategy, unlike the unbounded 'energy' default.
