@@ -50,11 +50,11 @@ wandb:
 # enable this block. Every knob here MUST match tiger_pretraining.yaml exactly:
 # the checkpoint filename only encodes the hidden size, so a mismatch in
 # recurrent_layers/dropout/use_encoder fails at load_state_dict.
-# neural_modules:
-#   hidden_size: 64      # simba: hidden_size
-#   recurrent_layers: 1  # simba: single-layer GRU
-#   dropout: 0.0         # simba: no dropout
-#   use_encoder: false   # simba: GRU on the raw flowstats window
+neural_modules:
+  hidden_size: 64      # simba: hidden_size
+  recurrent_layers: 1  # simba: single-layer GRU
+  dropout: 0.0         # simba: no dropout
+  use_encoder: false   # simba: GRU on the raw flowstats window
 
 intrusion_detection:
   # ------------------------------------------------------ decision module
