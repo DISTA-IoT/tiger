@@ -17,9 +17,11 @@
 #     with overrides/tiger_pretraining.yaml (now the SIMBA-geometry recipe),
 #     rename the saved checkpoints as its header describes, then uncomment the
 #     "SIMBA-geometry IM" block below.
-#   * unknown-traffic clustering stays on the (G1-supervised) kernel-regression
-#     head rather than SIMBA's standardised-input-space single-linkage; both are
-#     G1-calibrated, but the substrate differs.
+#   * (closed) unknown-traffic clustering now IS SIMBA's standardised-
+#     input-space single-linkage under a G1-calibrated radius:
+#     `input_space_clustering: true` below (was the (G1-supervised)
+#     kernel-regression head). The kernel head is still trained/evaluated for
+#     its metrics; only the partition the DM acts on changed.
 #   * (closed) the DM's exteroceptive state now IS SIMBA's stationary
 #     input-space centroid: `state: input` below. The full remaining-difference
 #     audit lives in smartville-controller/tiger_vs_simba.md.
@@ -107,6 +109,16 @@ intrusion_detection:
   # simba's prototypes come from TRAINABLE classes only (Knowns + bought CTIs);
   # G1s supervise novelty but are never part of the inference known-set.
   exclude_g1_from_ad_known_set: true
+  # simba clusters unknown traffic by single-linkage connected components in the
+  # STANDARDISED RAW-INPUT space (input_rep), under a radius calibrated on the G1
+  # pseudo zero-days (1.25x max within-class 90th-pct spread, capped at 0.6x the
+  # min between-G1-centroid distance) -- stationary, explicitly G1-calibrated
+  # granularity. 'input_space_clustering' is TIGER's port of exactly that; the
+  # kernel-regression head is still trained/evaluated (its metrics keep
+  # reporting), only the partition the DM acts on changes. Pairs with the
+  # 'state: input' centroids above (same substrate).
+  input_space_clustering: true
+  cluster_radius_factor: 1.0  # simba: cluster_radius_factor (radius scale; <1 splits finer, >1 merges)
 
   # ------------------------------------------------ environment / economics
   tiger_init_budget: 2500   # simba: init_budget (headroom so a greedy buyer could afford all 7 CTIs)
